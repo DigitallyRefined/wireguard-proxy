@@ -32,6 +32,7 @@ MTU        = 1420              # optional, default 1420
 
 [Peer]
 PublicKey           = <base64 or 64-char hex>
+PresharedKey        = <server-preshared-key-base64>
 Endpoint            = wireguard.example.com:51820
 AllowedIPs          = 10.0.0.0/24, 192.168.100.0/24
 PersistentKeepalive = 25       # optional, default 25
@@ -52,15 +53,16 @@ Keys accept both **base64** (wg-quick standard) and **64-char hex**.
 
 Set these in your container environment instead of a config file:
 
-| Variable              | Description                   | Example                       |
-| --------------------- | ----------------------------- | ----------------------------- |
-| `WG_PRIVATE_KEY`      | Interface private key         | `base64...`                   |
-| `WG_ADDRESS`          | Tunnel IP                     | `10.0.0.2`                    |
-| `WG_DNS`              | DNS server (optional)         | `10.0.0.1`                    |
-| `WG_PEER_PUBLIC_KEY`  | Peer public key               | `base64...`                   |
-| `WG_PEER_ENDPOINT`    | Peer host:port                | `wireguard.example.com:51820` |
-| `WG_PEER_ALLOWED_IPS` | Comma-separated CIDRs         | `10.0.0.0/24`                 |
-| `WG_FORWARDS`         | Comma-separated forward rules | see below                     |
+| Variable                | Description                   | Example                       |
+| ----------------------- | ----------------------------- | ----------------------------- |
+| `WG_PRIVATE_KEY`        | Interface private key         | `base64...`                   |
+| `WG_ADDRESS`            | Tunnel IP                     | `10.0.0.2`                    |
+| `WG_DNS`                | DNS server (optional)         | `10.0.0.1`                    |
+| `WG_PEER_PUBLIC_KEY`    | Peer public key               | `base64...`                   |
+| `WG_PEER_PRESHARED_KEY` | Peer preshared key            | `base64...`                   |
+| `WG_PEER_ENDPOINT`      | Peer host:port                | `wireguard.example.com:51820` |
+| `WG_PEER_ALLOWED_IPS`   | Comma-separated CIDRs         | `10.0.0.0/24`                 |
+| `WG_FORWARDS`           | Comma-separated forward rules | see below                     |
 
 ### `WG_FORWARDS` format
 
@@ -86,6 +88,7 @@ WG_FORWARDS=tcp:127.0.0.1:5432:10.0.0.1:5432,tcp:127.0.0.1:6379:10.0.0.1:6379,ud
 export WG_PRIVATE_KEY=...
 export WG_ADDRESS=10.0.0.2
 export WG_PEER_PUBLIC_KEY=...
+export WG_PEER_PRESHARED_KEY=...
 export WG_PEER_ENDPOINT=wireguard.example.com:51820
 export WG_FORWARDS=tcp:127.0.0.1:5432:10.0.0.1:5432
 ./wg-proxy

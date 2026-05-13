@@ -1,0 +1,13 @@
+services:
+  wg-proxy:
+    image: wg-proxy
+    container_name: wg-proxy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./wg-proxy.conf:/etc/wg-proxy/wg-proxy.conf
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

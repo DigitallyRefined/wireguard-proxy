@@ -8,9 +8,21 @@ import (
 	"syscall"
 )
 
+var isDebug bool
+
+func debugLog(format string, v ...any) {
+	if isDebug {
+		log.Printf(format, v...)
+	}
+}
+
 func main() {
 	log.SetFlags(log.Ltime | log.Lmsgprefix)
 	log.SetPrefix("wg-proxy ")
+
+	if os.Getenv("DEBUG") == "1" || os.Getenv("DEBUG") == "true" {
+		isDebug = true
+	}
 
 	configPath := flag.String("config", "wg-proxy.conf", "path to config file")
 	flag.Parse()

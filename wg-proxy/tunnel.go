@@ -24,7 +24,7 @@ type Tunnel struct {
 func NewTunnel(cfg *Config) (*Tunnel, error) {
 	tun, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{cfg.Interface.Address},
-		[]netip.Addr{cfg.Interface.DNS},
+		cfg.Interface.DNS,
 		cfg.Interface.MTU,
 	)
 	if err != nil {
@@ -66,6 +66,9 @@ func buildIPC(cfg *Config) (string, error) {
 	// Peer sections
 	for _, p := range cfg.Peers {
 		b = appendf(b, "public_key=%s\n", p.PublicKey)
+		if p.PresharedKey != "" {
+			b = appendf(b, "preshared_key=%s\n", p.PresharedKey)
+		}
 		b = appendf(b, "endpoint=%s\n", p.Endpoint)
 
 		for _, prefix := range p.AllowedIPs {

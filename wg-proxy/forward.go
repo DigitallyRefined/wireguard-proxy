@@ -12,7 +12,6 @@ package main
 import (
 	"context"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -21,9 +20,89 @@ import (
 )
 
 const (
-	udpBufSize    = 65535
-	udpIdleTimeout = 5 * time.Minute
+	udpBufSize     = 65535
+	udpIdleTimeout  = 5 * time.Minute
+	dialTimeout     = 10 * time.Second
+	maxPoolSize     = 10
 )
+
+var (
+	tcpConnPool = make(map[string]chan net.Conn)
+	poolMu      sync.Mutex
+)
+
+func getFromPool(remoteAddr string) net.Conn {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+	ch, ok := tcpConnPool[remoteAddr]
+	if !ok {
+		return nil
+	}
+	for {
+		select {
+		case conn := <-ch:
+			// Check if connection is still alive (roughly)
+			// We can't easily check for half-closed without a read,
+			// but for high-frequency sequential requests, this is usually fine.
+			return conn
+		default:
+			return nil
+		}
+	}
+}
+
+func putInPool(remoteAddr string, conn net.Conn) {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+	ch, ok := tcpConnPool[remoteAddr]
+	if !ok {
+		ch = make(chan net.Conn, 20)
+		tcpConnPool[remoteAddr] = ch
+	}
+	select {
+	case ch <- conn:
+	default:
+		conn.Close()
+	}
+}
+
+func maintainPool(tnet *netstack.Net, remoteAddr string) {
+	for {
+		poolMu.Lock()
+		ch, ok := tcpConnPool[remoteAddr]
+		var count int
+		if ok {
+			count = len(ch)
+		}
+		poolMu.Unlock()
+
+		if count < maxPoolSize {
+			// Dial multiple in parallel to replenish faster
+			needed := maxPoolSize - count
+			if needed > 3 {
+				needed = 3 // Don't overwhelm with too many parallel dials
+			}
+			for i := 0; i < needed; i++ {
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+					conn, err := tnet.DialContext(ctx, "tcp", remoteAddr)
+					cancel()
+					if err == nil {
+						if tc, ok := conn.(*net.TCPConn); ok {
+							tc.SetKeepAlive(true)
+							tc.SetKeepAlivePeriod(30 * time.Second)
+							tc.SetNoDelay(true)
+						}
+						putInPool(remoteAddr, conn)
+					}
+				}()
+			}
+			time.Sleep(1 * time.Second) // Wait for some dials to finish
+		} else {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+}
 
 // TCP binds localAddr (e.g. "127.0.0.1:5432"), accepts TCP connections,
 // and forwards each one to remoteAddr (e.g. "10.0.0.1:5432") through tnet.
@@ -35,10 +114,12 @@ func TCPForward(tnet *netstack.Net, localAddr, remoteAddr string) error {
 	}
 	defer ln.Close()
 
+	// Start pool maintainer
+	go maintainPool(tnet, remoteAddr)
+
 	for {
 		client, err := ln.Accept()
 		if err != nil {
-			// Listener closed — not an error worth logging at runtime.
 			return err
 		}
 		go handleTCP(tnet, client, remoteAddr)
@@ -46,14 +127,45 @@ func TCPForward(tnet *netstack.Net, localAddr, remoteAddr string) error {
 }
 
 func handleTCP(tnet *netstack.Net, client net.Conn, remoteAddr string) {
+	start := time.Now()
 	defer client.Close()
 
-	remote, err := tnet.DialContext(context.Background(), "tcp", remoteAddr)
-	if err != nil {
-		log.Printf("TCP: dial %s through tunnel: %v", remoteAddr, err)
-		return
+	var remote net.Conn
+	// Try pool first
+	if pooled := getFromPool(remoteAddr); pooled != nil {
+		remote = pooled
+	} else {
+		// Fallback to direct dial with retry
+		for i := 0; i < 2; i++ {
+			ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+			var err error
+			remote, err = tnet.DialContext(ctx, "tcp", remoteAddr)
+			cancel()
+			if err == nil {
+				break
+			}
+			if i == 0 {
+				// Don't log retry for sequential load unless it's really slow
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			debugLog("TCP: dial %s through tunnel (failed after %v): %v", remoteAddr, time.Since(start), err)
+			return
+		}
 	}
+
+	if d := time.Since(start); d > 500*time.Millisecond {
+		debugLog("TCP: dial %s took %v", remoteAddr, d)
+	}
+
 	defer remote.Close()
+
+	// Ensure keepalives are set (if not already from pool)
+	if tc, ok := remote.(*net.TCPConn); ok {
+		tc.SetKeepAlive(true)
+		tc.SetKeepAlivePeriod(30 * time.Second)
+		tc.SetNoDelay(true)
+	}
 
 	// Copy in both directions simultaneously; close both sides when either ends.
 	done := make(chan struct{}, 2)
@@ -133,7 +245,7 @@ func UDPForward(tnet *netstack.Net, localAddr, remoteAddr string) error {
 			remote, err := tnet.DialContext(context.Background(), "udp", remoteAddr)
 			if err != nil {
 				mu.Unlock()
-				log.Printf("UDP: dial %s through tunnel: %v", remoteAddr, err)
+				debugLog("UDP: dial %s through tunnel: %v", remoteAddr, err)
 				continue
 			}
 			sess = &udpSession{remote: remote, lastActive: time.Now()}
@@ -146,7 +258,7 @@ func UDPForward(tnet *netstack.Net, localAddr, remoteAddr string) error {
 		mu.Unlock()
 
 		if _, err := sess.remote.Write(data); err != nil {
-			log.Printf("UDP: write to tunnel (%s): %v", remoteAddr, err)
+			debugLog("UDP: write to tunnel (%s): %v", remoteAddr, err)
 		}
 	}
 }
@@ -188,7 +300,7 @@ func relayUDPResponse(
 		mu.Unlock()
 
 		if _, err := local.WriteTo(buf[:n], clientAddr); err != nil {
-			log.Printf("UDP: write to client %s: %v", clientAddr, err)
+			debugLog("UDP: write to client %s: %v", clientAddr, err)
 			return
 		}
 	}

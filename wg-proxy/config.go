@@ -10,6 +10,7 @@
 //
 //	[Peer]
 //	PublicKey           = <base64 or hex>
+//	PresharedKey        = <base64 or hex>
 //	Endpoint            = 1.2.3.4:51820
 //	AllowedIPs          = 10.0.0.0/24, 192.168.1.0/24
 //	PersistentKeepalive = 25   # optional, default 25
@@ -54,12 +55,13 @@ type Config struct {
 type InterfaceConfig struct {
 	PrivateKey string // always hex-encoded internally
 	Address    netip.Addr
-	DNS        netip.Addr
+	DNS        []netip.Addr
 	MTU        int
 }
 
 type PeerConfig struct {
 	PublicKey           string // always hex-encoded internally
+	PresharedKey        string // always hex-encoded internally
 	Endpoint            string // host:port
 	AllowedIPs          []netip.Prefix
 	PersistentKeepalive int
@@ -194,11 +196,14 @@ func parseInterfaceKV(iface *InterfaceConfig, k, v string) error {
 		}
 		iface.Address = addr
 	case "dns":
-		addr, err := netip.ParseAddr(v)
-		if err != nil {
-			return err
+		for _, d := range strings.Split(v, ",") {
+			d = strings.TrimSpace(d)
+			addr, err := netip.ParseAddr(d)
+			if err != nil {
+				return err
+			}
+			iface.DNS = append(iface.DNS, addr)
 		}
-		iface.DNS = addr
 	case "mtu":
 		if _, err := fmt.Sscanf(v, "%d", &iface.MTU); err != nil {
 			return fmt.Errorf("invalid MTU %q", v)
@@ -217,6 +222,12 @@ func parsePeerKV(peer *PeerConfig, k, v string) error {
 			return err
 		}
 		peer.PublicKey = key
+	case "presharedkey":
+		key, err := decodeKey(v)
+		if err != nil {
+			return err
+		}
+		peer.PresharedKey = key
 	case "endpoint":
 		peer.Endpoint = v
 	case "allowedips":
@@ -260,10 +271,11 @@ func parseForwardLine(line string) (ForwardRule, error) {
 // loadFromEnv builds a Config entirely from environment variables.
 // Returns (nil, false) if the minimum required vars are absent.
 func loadFromEnv() (*Config, bool) {
-	privKey := os.Getenv("WG_PRIVATE_KEY")
-	address := os.Getenv("WG_ADDRESS")
-	peerPub := os.Getenv("WG_PEER_PUBLIC_KEY")
-	peerEP := os.Getenv("WG_PEER_ENDPOINT")
+	privKey       := os.Getenv("WG_PRIVATE_KEY")
+	address       := os.Getenv("WG_ADDRESS")
+	peerPub       := os.Getenv("WG_PEER_PUBLIC_KEY")
+	peerPreshared := os.Getenv("WG_PEER_PRESHARED_KEY")
+	peerEP        := os.Getenv("WG_PEER_ENDPOINT")
 
 	if privKey == "" || address == "" || peerPub == "" || peerEP == "" {
 		return nil, false
@@ -276,6 +288,13 @@ func loadFromEnv() (*Config, bool) {
 	peerPubHex, err := decodeKey(peerPub)
 	if err != nil {
 		return nil, false
+	}
+	var peerPresharedHex string
+	if peerPreshared != "" {
+		peerPresharedHex, err = decodeKey(peerPreshared)
+		if err != nil {
+			return nil, false
+		}
 	}
 
 	addr, err := netip.ParseAddr(strings.Split(address, "/")[0])
@@ -292,14 +311,18 @@ func loadFromEnv() (*Config, bool) {
 	applyDefaults(&cfg.Interface)
 
 	if dns := os.Getenv("WG_DNS"); dns != "" {
-		if a, err := netip.ParseAddr(dns); err == nil {
-			cfg.Interface.DNS = a
+		for _, d := range strings.Split(dns, ",") {
+			d = strings.TrimSpace(d)
+			if a, err := netip.ParseAddr(d); err == nil {
+				cfg.Interface.DNS = append(cfg.Interface.DNS, a)
+			}
 		}
 	}
 
 	allowedIPs := envOr("WG_PEER_ALLOWED_IPS", "0.0.0.0/0")
 	peer := PeerConfig{
 		PublicKey:           peerPubHex,
+		PresharedKey:        peerPresharedHex,
 		Endpoint:            peerEP,
 		PersistentKeepalive: 25,
 	}
@@ -344,8 +367,8 @@ func applyDefaults(iface *InterfaceConfig) {
 	if iface.MTU == 0 {
 		iface.MTU = 1420
 	}
-	if !iface.DNS.IsValid() {
-		iface.DNS = netip.MustParseAddr("1.1.1.1")
+	if len(iface.DNS) == 0 {
+		iface.DNS = []netip.Addr{netip.MustParseAddr("1.1.1.1")}
 	}
 }
 
