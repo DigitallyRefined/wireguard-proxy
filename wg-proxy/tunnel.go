@@ -5,10 +5,14 @@ package main
 import (
 	"fmt"
 	"net/netip"
+	"reflect"
+	"unsafe"
 
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun/netstack"
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 // Tunnel holds the live WireGuard device and the netstack Net handle
@@ -30,6 +34,28 @@ func NewTunnel(cfg *Config) (*Tunnel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create netstack TUN: %w", err)
 	}
+
+	// Performance Tuning: Optimize the userspace netstack for high-throughput
+	// and low-latency. We use reflect/unsafe to access the unexported stack field.
+	netstackValue := reflect.ValueOf(tnet).Elem()
+	stackField := netstackValue.FieldByName("stack")
+	netStack := (*stack.Stack)(unsafe.Pointer(stackField.UnsafeAddr()))
+
+	// Tune TCP buffer sizes (increase to 1MB)
+	// This improves throughput on high-bandwidth or high-latency links.
+	receiveBufferSize := tcpip.TCPReceiveBufferSizeRangeOption{
+		Min:     4096,
+		Default: 65536,
+		Max:     1048576,
+	}
+	netStack.SetOption(&receiveBufferSize)
+
+	sendBufferSize := tcpip.TCPSendBufferSizeRangeOption{
+		Min:     4096,
+		Default: 65536,
+		Max:     1048576,
+	}
+	netStack.SetOption(&sendBufferSize)
 
 	logger := device.NewLogger(device.LogLevelError, "(wg) ")
 	dev := device.NewDevice(tun, conn.NewDefaultBind(), logger)

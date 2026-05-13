@@ -15,7 +15,11 @@ RUN go mod download
 COPY . .
 
 # Static binary: no CGO, no libc dependency, runs in scratch or distroless
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+# Optimization: GOAMD64=v3 enables AVX2 for amd64. Go ignores this for other architectures.
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        export GOAMD64=v3; \
+    fi; \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -ldflags="-s -w" -trimpath \
     -o /usr/bin/wg-proxy ./wg-proxy
 
