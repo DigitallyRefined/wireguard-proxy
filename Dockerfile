@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+#
+# Multi-platform build:
+#   docker buildx build --platform linux/amd64,linux/arm64 -t wg-proxy:latest --push .
+#
+# ── Build stage ────────────────────────────────────────────────────────────────
+FROM --platform=$BUILDPLATFORM golang:1.26.3 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Static binary: no CGO, no libc dependency, runs in scratch or distroless
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" -trimpath \
+    -o /usr/bin/wg-proxy ./wg-proxy
+
+# ── Runtime stage ──────────────────────────────────────────────────────────────
+# scratch = zero OS overhead, no shell, minimal attack surface.
+# Switch to "alpine" if you need a shell for debugging.
+FROM scratch
+
+COPY --from=builder /usr/bin/wg-proxy /usr/bin/wg-proxy
+
+# If you use a file, mount it at /etc/wg-proxy/wg-proxy.conf and set:
+#   WG_PROXY_CONFIG=/etc/wg-proxy/wg-proxy.conf
+
+ENTRYPOINT ["/usr/bin/wg-proxy"]
+# Default config path; override with -config flag or WG_PROXY_CONFIG env var
+CMD ["-config", "/etc/wg-proxy/wg-proxy.conf"]

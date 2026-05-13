@@ -1,0 +1,85 @@
+// Package tunnel creates a WireGuard userspace tunnel using wireguard-go's
+// netstack backend. No TUN device, no NET_ADMIN capability, no kernel module.
+package main
+
+import (
+	"fmt"
+	"net/netip"
+
+	"golang.zx2c4.com/wireguard/conn"
+	"golang.zx2c4.com/wireguard/device"
+	"golang.zx2c4.com/wireguard/tun/netstack"
+)
+
+// Tunnel holds the live WireGuard device and the netstack Net handle
+// that callers use to dial or listen through the tunnel.
+type Tunnel struct {
+	Net *netstack.Net
+	dev *device.Device
+}
+
+// New builds and brings up a WireGuard userspace tunnel from cfg.
+// The returned Tunnel.Net can be used to Dial (TCP/UDP) or Listen
+// on addresses reachable through the WireGuard peer network.
+func NewTunnel(cfg *Config) (*Tunnel, error) {
+	tun, tnet, err := netstack.CreateNetTUN(
+		[]netip.Addr{cfg.Interface.Address},
+		[]netip.Addr{cfg.Interface.DNS},
+		cfg.Interface.MTU,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create netstack TUN: %w", err)
+	}
+
+	logger := device.NewLogger(device.LogLevelError, "(wg) ")
+	dev := device.NewDevice(tun, conn.NewDefaultBind(), logger)
+
+	ipcConf, err := buildIPC(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dev.IpcSet(ipcConf); err != nil {
+		return nil, fmt.Errorf("ipc set: %w", err)
+	}
+
+	if err := dev.Up(); err != nil {
+		return nil, fmt.Errorf("device up: %w", err)
+	}
+
+	return &Tunnel{Net: tnet, dev: dev}, nil
+}
+
+// Close shuts down the WireGuard device cleanly.
+func (t *Tunnel) Close() {
+	t.dev.Close()
+}
+
+// buildIPC produces the WireGuard IPC configuration string understood
+// by device.IpcSet. Format mirrors `wg setconf` output.
+func buildIPC(cfg *Config) (string, error) {
+	var b []byte
+
+	// Interface section
+	b = appendf(b, "private_key=%s\n", cfg.Interface.PrivateKey)
+
+	// Peer sections
+	for _, p := range cfg.Peers {
+		b = appendf(b, "public_key=%s\n", p.PublicKey)
+		b = appendf(b, "endpoint=%s\n", p.Endpoint)
+
+		for _, prefix := range p.AllowedIPs {
+			b = appendf(b, "allowed_ip=%s\n", prefix.String())
+		}
+
+		if p.PersistentKeepalive > 0 {
+			b = appendf(b, "persistent_keepalive_interval=%d\n", p.PersistentKeepalive)
+		}
+	}
+
+	return string(b), nil
+}
+
+func appendf(b []byte, format string, args ...any) []byte {
+	return fmt.Appendf(b, format, args...)
+}
