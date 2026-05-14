@@ -36,7 +36,7 @@ PublicKey           = <base64 or 64-char hex>
 PresharedKey        = <server-preshared-key-base64>  # optional
 Endpoint            = wireguard.example.com:51820    # optional
 AllowedIPs          = 10.0.0.0/24, 192.168.100.0/24
-PersistentKeepalive = 25                             # optional, default 25
+PersistentKeepalive = 0                              # optional, default 0
 
 # Forwarding rules
 # proto  bind-addr    bind-port  remote-addr remote-port

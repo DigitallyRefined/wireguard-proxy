@@ -11,10 +11,10 @@
 //
 //	[Peer]
 //	PublicKey           = <base64 or hex>
-//	PresharedKey        = <base64 or hex> # optional
-//	Endpoint            = 1.2.3.4:51820   # optional
+//	PresharedKey        = <base64 or hex>              # optional
+//	Endpoint            = 1.2.3.4:51820                # optional
 //	AllowedIPs          = 10.0.0.0/24, 192.168.1.0/24
-//	PersistentKeepalive = 25   # optional, default 25
+//	PersistentKeepalive = 0                            # optional, default 0
 //
 //	# Forwarding rules
 //	# proto  bind-addr       bind-port  remote-addr    remote-port
@@ -136,7 +136,7 @@ func loadFromFile(path string) (*Config, error) {
 			}
 			section = name
 			if section == "peer" {
-				currentPeer = &PeerConfig{PersistentKeepalive: 25}
+				currentPeer = &PeerConfig{PersistentKeepalive: 0}
 			}
 			continue
 		}
@@ -340,7 +340,7 @@ func loadFromEnv() (*Config, bool) {
 		PublicKey:           peerPubHex,
 		PresharedKey:        peerPresharedHex,
 		Endpoint:            peerEP,
-		PersistentKeepalive: 25,
+		PersistentKeepalive: 0,
 	}
 	for _, cidr := range strings.Split(allowedIPs, ",") {
 		cidr = strings.TrimSpace(cidr)

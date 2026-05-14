@@ -1,0 +1,75 @@
+name: Build and push
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get latest release tag
+        id: get-latest-tag
+        run: |
+          git fetch --tags
+          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0")
+          echo "tag=$latest_tag" >> $GITHUB_ENV
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/digitallyrefined/wireguard-proxy
+          tags: |
+            type=raw,value=latest,enable=true
+            type=raw,value=${{ env.tag }},enable=true
+          labels: |
+            org.opencontainers.image.title=wireguard-proxy
+            org.opencontainers.image.source=https://github.com/DigitallyRefined/wireguard-proxy
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          sbom: false
+          outputs: |
+            type=image,push=true
+            type=local,dest=dist
+
+      - name: Prepare binaries for release
+        run: |
+          mv dist/linux_amd64/usr/bin/wg-proxy dist/wg-proxy-linux-amd64
+          mv dist/linux_arm64/usr/bin/wg-proxy dist/wg-proxy-linux-arm64
+
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.tag }}
+          files: |
+            dist/wg-proxy-linux-amd64
+            dist/wg-proxy-linux-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

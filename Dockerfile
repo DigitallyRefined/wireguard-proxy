@@ -27,6 +27,13 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 # scratch = zero OS overhead, no shell, minimal attack surface.
 # Switch to "alpine" if you need a shell for debugging.
 FROM scratch
+ARG TARGETOS
+ARG TARGETARCH
+
+LABEL org.opencontainers.image.source https://github.com/DigitallyRefined/wireguard-proxy
+LABEL org.opencontainers.image.description "A zero-privilege WireGuard port forwarder using userspace networking"
+LABEL org.opencontainers.image.base.name "scratch"
+LABEL com.digitallyrefined.platform "${TARGETOS}/${TARGETARCH}"
 
 COPY --from=builder /usr/bin/wg-proxy /usr/bin/wg-proxy
 
