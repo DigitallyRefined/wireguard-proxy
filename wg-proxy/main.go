@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-const Version = "v0.0.1"
+const Version = "v0.0.2"
 
 var isDebug bool
 
@@ -27,7 +27,7 @@ func main() {
 		isDebug = true
 	}
 
-	configPath := flag.String("config", "wg-proxy.conf", "path to config file")
+	configPath := flag.String("config", "", "path to config file (if empty, falls back to environment variables)")
 	showVersion := flag.Bool("v", false, "display version")
 	flag.Parse()
 

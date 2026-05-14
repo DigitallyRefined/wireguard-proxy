@@ -55,15 +55,19 @@ Keys accept both **base64** (wg-quick standard) and **64-char hex**.
 
 Set these in your container environment instead of a config file:
 
-| Variable              | Description                   | Example                       |
-| --------------------- | ----------------------------- | ----------------------------- |
-| `WG_PRIVATE_KEY`      | Interface private key         | `base64...`                   |
-| `WG_ADDRESS`          | Tunnel IP                     | `10.0.0.2`                    |
-| `WG_DNS`              | DNS server (optional)         | `1.1.1.1`                     |
-| `WG_PEER_PUBLIC_KEY`  | Peer public key               | `base64...`                   |
-| `WG_PEER_ENDPOINT`    | Peer host:port (optional)     | `wireguard.example.com:51820` |
-| `WG_PEER_ALLOWED_IPS` | Comma-separated CIDRs         | `10.0.0.0/24`                 |
-| `WG_FORWARDS`         | Comma-separated forward rules | see below                     |
+| Variable                       | Description                   | Example                       |
+| ------------------------------ | ----------------------------- | ----------------------------- |
+| `WG_PRIVATE_KEY`               | Interface private key         | `base64...`                   |
+| `WG_ADDRESS`                   | Tunnel IP                     | `10.0.0.2`                    |
+| `WG_LISTEN_PORT`               | Listen port (optional)        | `51820`                       |
+| `WG_MTU`                       | Interface MTU (optional)      | `1420`                        |
+| `WG_DNS`                       | DNS server (optional)         | `1.1.1.1`                     |
+| `WG_PEER_PUBLIC_KEY`           | Peer public key               | `base64...`                   |
+| `WG_PEER_PRESHARED_KEY`        | Peer preshared key (optional) | `base64...`                   |
+| `WG_PEER_ENDPOINT`             | Peer host:port (optional)     | `wireguard.example.com:51820` |
+| `WG_PEER_ALLOWED_IPS`          | Comma-separated CIDRs         | `10.0.0.0/24`                 |
+| `WG_PEER_PERSISTENT_KEEPALIVE` | Keepalive interval (optional) | `25`                          |
+| `WG_FORWARDS`                  | Comma-separated forward rules | see below                     |
 
 ### `WG_FORWARDS` format
 

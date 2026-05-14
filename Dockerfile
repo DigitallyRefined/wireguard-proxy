@@ -30,10 +30,10 @@ FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
 
-LABEL org.opencontainers.image.source https://github.com/DigitallyRefined/wireguard-proxy
-LABEL org.opencontainers.image.description "A zero-privilege WireGuard port forwarder using userspace networking"
-LABEL org.opencontainers.image.base.name "scratch"
-LABEL com.digitallyrefined.platform "${TARGETOS}/${TARGETARCH}"
+LABEL org.opencontainers.image.source=https://github.com/DigitallyRefined/wireguard-proxy
+LABEL org.opencontainers.image.description="A zero-privilege WireGuard port forwarder using userspace networking"
+LABEL org.opencontainers.image.base.name="scratch"
+LABEL com.digitallyrefined.platform="${TARGETOS}/${TARGETARCH}"
 
 COPY --from=builder /usr/bin/wg-proxy /usr/bin/wg-proxy
 
@@ -41,5 +41,3 @@ COPY --from=builder /usr/bin/wg-proxy /usr/bin/wg-proxy
 #   WG_PROXY_CONFIG=/etc/wg-proxy/wg-proxy.conf
 
 ENTRYPOINT ["/usr/bin/wg-proxy"]
-# Default config path; override with -config flag or WG_PROXY_CONFIG env var
-CMD ["-config", "/etc/wg-proxy/wg-proxy.conf"]
