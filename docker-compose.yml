@@ -1,6 +1,6 @@
 services:
   wg-proxy:
-    image: ghcr.io/digitallyrefined/wireguard-proxy:v0.0.1
+    image: ghcr.io/digitallyrefined/wireguard-proxy:v0.0.2
     container_name: wg-proxy
     restart: unless-stopped
     ports:
