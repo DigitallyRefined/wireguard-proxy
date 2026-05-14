@@ -10,6 +10,7 @@ services:
     #   - DEBUG=true
     volumes:
       - ./wg-proxy.conf:/etc/wg-proxy/wg-proxy.conf
+    command: ["-config", "/etc/wg-proxy/wg-proxy.conf"]
     logging:
       driver: "json-file"
       options:
