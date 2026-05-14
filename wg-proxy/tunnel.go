@@ -4,8 +4,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/netip"
 	"reflect"
+	"strings"
 	"unsafe"
 
 	"golang.zx2c4.com/wireguard/conn"
@@ -57,7 +59,34 @@ func NewTunnel(cfg *Config) (*Tunnel, error) {
 	}
 	netStack.SetOption(&sendBufferSize)
 
-	logger := device.NewLogger(device.LogLevelError, "(wg) ")
+	// Set up custom logger. Error logs go to standard error logger,
+	// Verbose logs are filtered by handshakeLogger to detect peer handshakes.
+	logger := &device.Logger{
+		Verbosef: func(format string, args ...any) {
+			msg := fmt.Sprintf(format, args...)
+			// Look for handshake completion messages from wireguard-go.
+			// Format: "peer(PUBKEY) - Handshake for peer N (IP:PORT) completed"
+			if strings.Contains(msg, "Handshake for peer") && strings.Contains(msg, "completed") {
+				log.Printf("WireGuard: %s", strings.TrimSpace(msg))
+			} else if isDebug {
+				// If global debug is enabled, pass through other verbose logs.
+				log.Printf("WireGuard debug: %s", strings.TrimSpace(msg))
+			}
+		},
+		Errorf: func(format string, args ...any) {
+			msg := fmt.Sprintf(format, args...)
+			// Filter out noise when acting as a passive responder.
+			// wireguard-go tries to initiate handshakes for all peers, but if we
+			// intentionally left the endpoint empty, this "error" is expected.
+			if strings.Contains(msg, "no known endpoint for peer") {
+				if isDebug {
+					log.Printf("WireGuard debug: Peer Endpoint not set, waiting for peer to connect")
+				}
+				return
+			}
+			log.Printf("WireGuard ERROR: %s", strings.TrimSpace(msg))
+		},
+	}
 	dev := device.NewDevice(tun, conn.NewDefaultBind(), logger)
 
 	ipcConf, err := buildIPC(cfg)
@@ -88,6 +117,9 @@ func buildIPC(cfg *Config) (string, error) {
 
 	// Interface section
 	b = appendf(b, "private_key=%s\n", cfg.Interface.PrivateKey)
+	if cfg.Interface.ListenPort > 0 {
+		b = appendf(b, "listen_port=%d\n", cfg.Interface.ListenPort)
+	}
 
 	// Peer sections
 	for _, p := range cfg.Peers {
@@ -95,7 +127,9 @@ func buildIPC(cfg *Config) (string, error) {
 		if p.PresharedKey != "" {
 			b = appendf(b, "preshared_key=%s\n", p.PresharedKey)
 		}
-		b = appendf(b, "endpoint=%s\n", p.Endpoint)
+		if p.Endpoint != "" {
+			b = appendf(b, "endpoint=%s\n", p.Endpoint)
+		}
 
 		for _, prefix := range p.AllowedIPs {
 			b = appendf(b, "allowed_ip=%s\n", prefix.String())

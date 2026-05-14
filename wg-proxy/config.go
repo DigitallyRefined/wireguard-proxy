@@ -5,34 +5,37 @@
 //	[Interface]
 //	PrivateKey = <base64 or hex>
 //	Address    = 10.0.0.2
-//	DNS        = 10.0.0.1      # optional, default 1.1.1.1
+//	ListenPort = 51820         # optional
+//	DNS        = 1.1.1.1       # optional, default 1.1.1.1
 //	MTU        = 1420          # optional, default 1420
 //
 //	[Peer]
 //	PublicKey           = <base64 or hex>
-//	PresharedKey        = <base64 or hex>
-//	Endpoint            = 1.2.3.4:51820
+//	PresharedKey        = <base64 or hex> # optional
+//	Endpoint            = 1.2.3.4:51820   # optional
 //	AllowedIPs          = 10.0.0.0/24, 192.168.1.0/24
 //	PersistentKeepalive = 25   # optional, default 25
 //
 //	# Forwarding rules
 //	# proto  bind-addr       bind-port  remote-addr    remote-port
 //	[Forward]
-//	tcp      127.0.0.1       5432       10.0.0.1       5432
+//	tcp      0.0.0.0         8080       10.0.0.1       8080
 //	tcp      127.0.0.1       6379       10.0.0.1       6379
-//	udp      127.0.0.1       5353       10.0.0.1       53
+//	udp      0.0.0.0         5353       10.0.0.1       53
 //	udp      127.0.0.1       1194       10.0.0.5       1194
 //
 // Environment variable override:
 //
 //	WG_PRIVATE_KEY         base64 or hex private key
 //	WG_ADDRESS             tunnel IP, e.g. 10.0.0.2
+//	WG_LISTEN_PORT         optional WireGuard listen port, e.g. 51820
 //	WG_DNS                 optional DNS, default 1.1.1.1
 //	WG_PEER_PUBLIC_KEY     base64 or hex peer public key
-//	WG_PEER_ENDPOINT       host:port of WireGuard server
+//	WG_PEER_PRESHARDED_KEY base64 or hex peer preshared key, optional
+//	WG_PEER_ENDPOINT       optional host:port of WireGuard server
 //	WG_PEER_ALLOWED_IPS    comma-separated CIDRs, default 0.0.0.0/0
 //	WG_FORWARDS            space-separated rules:
-//	                        "tcp:127.0.0.1:5432:10.0.0.1:5432,udp:127.0.0.1:5353:10.0.0.1:53"
+//	                        "tcp:0.0.0.0:8080:10.0.0.1:8080,udp:0.0.0.0:5353:10.0.0.1:53"
 
 package main
 
@@ -55,6 +58,7 @@ type Config struct {
 type InterfaceConfig struct {
 	PrivateKey string // always hex-encoded internally
 	Address    netip.Addr
+	ListenPort int
 	DNS        []netip.Addr
 	MTU        int
 }
@@ -195,6 +199,10 @@ func parseInterfaceKV(iface *InterfaceConfig, k, v string) error {
 			return err
 		}
 		iface.Address = addr
+	case "listenport":
+		if _, err := fmt.Sscanf(v, "%d", &iface.ListenPort); err != nil {
+			return fmt.Errorf("invalid ListenPort %q", v)
+		}
 	case "dns":
 		for _, d := range strings.Split(v, ",") {
 			d = strings.TrimSpace(d)
@@ -277,7 +285,7 @@ func loadFromEnv() (*Config, bool) {
 	peerPreshared := os.Getenv("WG_PEER_PRESHARED_KEY")
 	peerEP        := os.Getenv("WG_PEER_ENDPOINT")
 
-	if privKey == "" || address == "" || peerPub == "" || peerEP == "" {
+	if privKey == "" || address == "" || peerPub == "" {
 		return nil, false
 	}
 
@@ -285,10 +293,17 @@ func loadFromEnv() (*Config, bool) {
 	if err != nil {
 		return nil, false
 	}
+
+	var listenPort int
+	if lp := os.Getenv("WG_LISTEN_PORT"); lp != "" {
+		fmt.Sscanf(lp, "%d", &listenPort)
+	}
+
 	peerPubHex, err := decodeKey(peerPub)
 	if err != nil {
 		return nil, false
 	}
+
 	var peerPresharedHex string
 	if peerPreshared != "" {
 		peerPresharedHex, err = decodeKey(peerPreshared)
@@ -306,6 +321,7 @@ func loadFromEnv() (*Config, bool) {
 		Interface: InterfaceConfig{
 			PrivateKey: privKeyHex,
 			Address:    addr,
+			ListenPort: listenPort,
 		},
 	}
 	applyDefaults(&cfg.Interface)
@@ -367,6 +383,9 @@ func applyDefaults(iface *InterfaceConfig) {
 	if iface.MTU == 0 {
 		iface.MTU = 1420
 	}
+	if iface.ListenPort == 0 {
+		iface.ListenPort = 51820
+	}
 	if len(iface.DNS) == 0 {
 		iface.DNS = []netip.Addr{netip.MustParseAddr("1.1.1.1")}
 	}
@@ -385,9 +404,6 @@ func validate(cfg *Config) error {
 	for i, p := range cfg.Peers {
 		if p.PublicKey == "" {
 			return fmt.Errorf("Peer[%d]: PublicKey required", i)
-		}
-		if p.Endpoint == "" {
-			return fmt.Errorf("Peer[%d]: Endpoint required", i)
 		}
 		if len(p.AllowedIPs) == 0 {
 			return fmt.Errorf("Peer[%d]: AllowedIPs required", i)

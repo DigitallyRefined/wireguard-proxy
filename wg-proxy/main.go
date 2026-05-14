@@ -2,11 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 )
+
+const Version = "v0.0.1"
 
 var isDebug bool
 
@@ -25,7 +28,13 @@ func main() {
 	}
 
 	configPath := flag.String("config", "wg-proxy.conf", "path to config file")
+	showVersion := flag.Bool("v", false, "display version")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("wg-proxy %s\n", Version)
+		os.Exit(0)
+	}
 
 	// Allow env override of config path
 	if p := os.Getenv("WG_PROXY_CONFIG"); p != "" {
@@ -37,8 +46,8 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	log.Printf("tunnel IP %s, %d peer(s), %d forward rule(s)",
-		cfg.Interface.Address, len(cfg.Peers), len(cfg.Forwards))
+	log.Printf("WireGuard listen port %d, tunnel IP %s, peer(s) %d, forward rule(s) %d",
+		cfg.Interface.ListenPort, cfg.Interface.Address, len(cfg.Peers), len(cfg.Forwards))
 
 	// Build the WireGuard userspace tunnel (no TUN, no NET_ADMIN, no kernel module)
 	tun, err := NewTunnel(cfg)

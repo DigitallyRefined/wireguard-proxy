@@ -27,22 +27,24 @@ Your app just connects to a local port and is automatically routed through the W
 [Interface]
 PrivateKey = <base64 or 64-char hex>
 Address    = 10.0.0.2
-DNS        = 10.0.0.1          # optional, default 1.1.1.1
-MTU        = 1420              # optional, default 1420
+ListenPort = 51820         # optional
+DNS        = 1.1.1         # optional, default 1.1.1.1
+MTU        = 1420          # optional, default 1420
 
 [Peer]
 PublicKey           = <base64 or 64-char hex>
-PresharedKey        = <server-preshared-key-base64>
-Endpoint            = wireguard.example.com:51820
+PresharedKey        = <server-preshared-key-base64>  # optional
+Endpoint            = wireguard.example.com:51820    # optional
 AllowedIPs          = 10.0.0.0/24, 192.168.100.0/24
-PersistentKeepalive = 25       # optional, default 25
+PersistentKeepalive = 25                             # optional, default 25
 
-# Forwarding rules: proto  bind-addr  bind-port  remote-addr  remote-port
+# Forwarding rules
+# proto  bind-addr    bind-port  remote-addr remote-port
 [Forward]
-tcp      127.0.0.1    5432       10.0.0.1    5432    # Postgres
+tcp      0.0.0.0      8080       10.0.0.1    8080    # Postgres
 tcp      127.0.0.1    6379       10.0.0.1    6379    # Redis
 tcp      127.0.0.1    3306       10.0.0.1    3306    # MySQL
-udp      127.0.0.1    5353       10.0.0.1    53      # DNS
+udp      0.0.0.0      5353       10.0.0.1    53      # DNS
 ```
 
 Keys accept both **base64** (wg-quick standard) and **64-char hex**.
@@ -53,16 +55,15 @@ Keys accept both **base64** (wg-quick standard) and **64-char hex**.
 
 Set these in your container environment instead of a config file:
 
-| Variable                | Description                   | Example                       |
-| ----------------------- | ----------------------------- | ----------------------------- |
-| `WG_PRIVATE_KEY`        | Interface private key         | `base64...`                   |
-| `WG_ADDRESS`            | Tunnel IP                     | `10.0.0.2`                    |
-| `WG_DNS`                | DNS server (optional)         | `10.0.0.1`                    |
-| `WG_PEER_PUBLIC_KEY`    | Peer public key               | `base64...`                   |
-| `WG_PEER_PRESHARED_KEY` | Peer preshared key            | `base64...`                   |
-| `WG_PEER_ENDPOINT`      | Peer host:port                | `wireguard.example.com:51820` |
-| `WG_PEER_ALLOWED_IPS`   | Comma-separated CIDRs         | `10.0.0.0/24`                 |
-| `WG_FORWARDS`           | Comma-separated forward rules | see below                     |
+| Variable              | Description                   | Example                       |
+| --------------------- | ----------------------------- | ----------------------------- |
+| `WG_PRIVATE_KEY`      | Interface private key         | `base64...`                   |
+| `WG_ADDRESS`          | Tunnel IP                     | `10.0.0.2`                    |
+| `WG_DNS`              | DNS server (optional)         | `1.1.1.1`                     |
+| `WG_PEER_PUBLIC_KEY`  | Peer public key               | `base64...`                   |
+| `WG_PEER_ENDPOINT`    | Peer host:port (optional)     | `wireguard.example.com:51820` |
+| `WG_PEER_ALLOWED_IPS` | Comma-separated CIDRs         | `10.0.0.0/24`                 |
+| `WG_FORWARDS`         | Comma-separated forward rules | see below                     |
 
 ### `WG_FORWARDS` format
 

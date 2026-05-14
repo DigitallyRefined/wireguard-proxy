@@ -3,7 +3,11 @@ services:
     image: wg-proxy
     container_name: wg-proxy
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "51820:51820/udp"
+      - "8080:8080"
+    # environment:
+    #   - DEBUG=true
     volumes:
       - ./wg-proxy.conf:/etc/wg-proxy/wg-proxy.conf
     logging:
