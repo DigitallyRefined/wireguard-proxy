@@ -65,7 +65,7 @@ jobs:
           mv dist/linux_arm64/usr/bin/wg-proxy dist/wg-proxy-linux-arm64
 
       - name: Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v3.0.1
         with:
           tag_name: ${{ env.tag }}
           files: |
