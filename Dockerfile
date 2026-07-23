@@ -4,7 +4,7 @@
 #   docker buildx build --platform linux/amd64,linux/arm64 -t wg-proxy:latest --push .
 #
 # ── Build stage ────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.26.4 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
