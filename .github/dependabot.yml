@@ -3,24 +3,28 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: "weekly"
+      day: sunday
     cooldown:
       default-days: 5
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: sunday
     cooldown:
       default-days: 5
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: sunday
     cooldown:
       default-days: 5
   - package-ecosystem: "docker-compose"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: sunday
     cooldown:
       default-days: 5
